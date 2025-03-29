@@ -1,5 +1,5 @@
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
-<suite name="Medicure Test Suite">
+<suite name="Medicure Test Suite" parallel="tests" thread-count="1">
     <test name="UI Tests">
         <classes>
             <class name="com.medicure.selenium.MedicureUITest"/>
