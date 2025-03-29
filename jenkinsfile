@@ -4,8 +4,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'master', 
-                url: 'https://github.com/yourusername/medicure-service.git'
+                git branch: 'main', 
+                url: 'https://github.com/vedprakash0708/health-care-project.git'
             }
         }
         
