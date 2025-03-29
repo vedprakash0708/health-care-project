@@ -21,6 +21,7 @@
         <java.version>11</java.version>
         <testng.version>7.4.0</testng.version>
         <junit.jupiter.version>5.8.2</junit.jupiter.version>
+        <selenium.version>4.1.0</selenium.version> <!-- Added Selenium version -->
     </properties>
 
     <dependencies>
@@ -62,6 +63,7 @@
             </exclusions>
         </dependency>
         
+        <!-- TestNG (if you're using TestNG) -->
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
@@ -69,6 +71,7 @@
             <scope>test</scope>
         </dependency>
         
+        <!-- JUnit 5 (if you're using JUnit) -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
@@ -83,19 +86,31 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Selenium WebDriver (MUST ADD) -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>${selenium.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- WebDriverManager (recommended for managing browser drivers) -->
+        <dependency>
+            <groupId>io.github.bonigarcia</groupId>
+            <artifactId>webdrivermanager</artifactId>
+            <version>5.1.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Actuator & Prometheus -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
-        <dependency>
-                <groupId>io.micrometer</groupId>
-                <artifactId>micrometer-registry-prometheus</artifactId>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
         <!-- Mockito for testing -->
@@ -119,18 +134,22 @@
                 <version>3.2.1</version>
             </plugin>
             
-            <!-- Surefire plugin for TestNG -->
+            <!-- Surefire plugin (for TestNG/JUnit) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
                 <configuration>
+                    <!-- If using TestNG -->
                     <suiteXmlFiles>
                         <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
                     </suiteXmlFiles>
+                    <!-- If using JUnit 5 -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
                 </configuration>
             </plugin>
         </plugins>
     </build>
-
 </project>
