@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: medicure-monitor
+  namespace: monitoring  # Same namespace where Prometheus is installed
+spec:
+  selector:
+    matchLabels:
+      app: medicure  # Matches your deployment's labels
+  endpoints:
+  - port: web        # Must match the port name in your Service definition
+    path: /actuator/prometheus
+    interval: 15s
+    scheme: http     # or https if using TLS

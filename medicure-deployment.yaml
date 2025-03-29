@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medicure-service
+  labels:
+    app: medicure
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: medicure
+  template:
+    metadata:
+      labels:
+        app: medicure
+      annotations:
+        prometheus.io/scrape: "true"    # प्रोमेथियस को मेट्रिक्स scrape करने दें
+        prometheus.io/port: "8080"      # मेट्रिक्स पोर्ट
+        prometheus.io/path: "/actuator/prometheus"  # स्प्रिंग बूट एक्ट्यूएटर एंडपॉइंट
+    spec:
+      containers:
+      - name: medicure
+        image: your-docker-repo/medicure-service:latest
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 20

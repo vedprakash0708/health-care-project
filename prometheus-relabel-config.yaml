@@ -1,0 +1,14 @@
+relabel_configs:
+  # Drop completed pods
+  - source_labels: [__meta_kubernetes_pod_phase]
+    regex: (Failed|Succeeded)
+    action: drop
+    
+  # Add environment label
+  - source_labels: [__meta_kubernetes_pod_label_environment]
+    target_label: environment
+    regex: (.+)
+    
+  # Set instance label
+  - source_labels: [__meta_kubernetes_pod_ip]
+    target_label: instance
