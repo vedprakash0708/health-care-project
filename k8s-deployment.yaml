@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: medicure
-        image: your-docker-registry/medicure-service:latest
+        image: vedantabharat/medicure-service:latest
         ports:
         - containerPort: 8080
 ---
