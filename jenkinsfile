@@ -2,29 +2,35 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_IMAGE = "vedantabharat/medicure-service:${env.BUILD_ID}"
+        DOCKER_IMAGE = "vedantabharat/medicure-service:${BUILD_NUMBER}"
     }
-    
+
     stages {
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/vedprakash0708/health-care-project.git'
             }
         }
         
-        stage('Build') {
+        stage('Build with Maven') {
             steps {
-                sh 'mvn clean package'
+                sh 'mvn clean package -DskipTests' // Skip tests in package phase
             }
         }
-        
-        stage('Test') {
+
+        stage('Verify JAR File') {
+            steps {
+                sh 'ls -l target/'  // Debugging step to ensure JAR exists
+            }
+        }
+
+        stage('Run Unit Tests') {
             steps {
                 sh 'mvn test'
                 junit 'target/surefire-reports/*.xml'
             }
         }
-        
+
         stage('Login to DockerHub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
@@ -35,18 +41,14 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh "docker build -t ${DOCKER_IMAGE} ."
-                }
+                sh "docker build -t ${DOCKER_IMAGE} ."
             }
         }
-        
+
         stage('Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    script {
-                        sh "docker push ${DOCKER_IMAGE}"
-                    }
+                    sh "docker push ${DOCKER_IMAGE}"
                 }
             }
         }
@@ -54,14 +56,21 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 sh 'kubectl apply -f k8s-deployment.yaml'
+                sh 'kubectl rollout restart deployment medicure-deployment'  // Restart deployment
             }
         }
     }
-    
+
     post {
         always {
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             cleanWs()
+        }
+        success {
+            echo "🎉 Deployment Successful!"
+        }
+        failure {
+            echo "❌ Deployment Failed!"
         }
     }
 }
