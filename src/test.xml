@@ -1,0 +1,15 @@
+@SpringBootTest
+public class DoctorControllerTest {
+    
+    @Autowired
+    private DoctorController doctorController;
+    
+    @Test
+    public void testRegisterDoctor() {
+        Doctor doctor = new Doctor("DOC003", "Dr. Test", "Testology");
+        Doctor result = doctorController.registerDoctor(doctor);
+        assertNotNull(result);
+        assertEquals("DOC003", result.getDoctorRegNo());
+    }
+    // more tests for other endpoints
+}
