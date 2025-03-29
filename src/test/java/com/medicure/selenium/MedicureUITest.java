@@ -1,9 +1,11 @@
+package com.medicure.selenium;
+
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.By;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.testng.annotations.*;
-import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.*;
 
 public class MedicureUITest {
     WebDriver driver;
