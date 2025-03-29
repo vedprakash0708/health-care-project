@@ -1,8 +1,0 @@
-<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
-<suite name="Medicure Tests">
-    <test name="DoctorControllerTest">
-        <classes>
-            <class name="com.medicure.controller.DoctorControllerTest"/>
-        </classes>
-    </test>
-</suite>
