@@ -27,8 +27,8 @@ pipeline {
         
         stage('Login to DockerHub') {
             steps {
-                script {
-                    sh 'echo "$DOCKER_PASSWORD" | docker login -u "vedantabharat" --password-stdin'
+                withCredentials([string(credentialsId: 'docker-hub-password', variable: 'DOCKER_PASSWORD')]) {
+                    sh 'echo "$DOCKER_PASSWORD" | docker login -u vedantabharat --password-stdin'
                 }
             }
         }
