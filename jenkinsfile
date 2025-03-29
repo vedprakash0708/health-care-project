@@ -36,15 +36,17 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}")
+                    docker.build(DOCKER_IMAGE, ".")
                 }
             }
         }
         
         stage('Push Docker Image') {
             steps {
-                script {
-                    docker.image("${DOCKER_IMAGE}").push("PAT")
+                withCredentials([string(credentialsId: 'docker-hub-password', variable: 'DOCKER_PASSWORD')]) {
+                    script {
+                        docker.image(DOCKER_IMAGE).push()
+                    }
                 }
             }
         }
