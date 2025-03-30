@@ -5,46 +5,64 @@ pipeline {
         DOCKER_IMAGE = "vedantabharat/medicure-service:${BUILD_NUMBER}"
         KUBE_CONTEXT = "minikube"
         BUILD_TIMEOUT = "15" // Minutes
+        NODE_PORT = "30080" // Matches deployment file
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                checkout([$class: 'GitSCM', 
+                checkout([
+                    $class: 'GitSCM',
                     branches: [[name: 'main']],
-                    userRemoteConfigs: [[url: 'https://github.com/vedprakash0708/health-care-project.git']]
+                    extensions: [
+                        [$class: 'CleanBeforeCheckout'],
+                        [$class: 'RelativeTargetDirectory', relativeTargetDir: 'src']
+                    ],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/vedprakash0708/health-care-project.git'
+                    ]]
                 ])
+                dir('src') {
+                    sh 'ls -la' // Verify files
+                }
             }
         }
         
         stage('Build') {
             steps {
-                timeout(time: "${env.BUILD_TIMEOUT}", unit: 'MINUTES') {
-                    sh 'mvn clean package -DskipTests'
-                    sh 'ls -l target/*.jar || { echo "❌ JAR file not found"; exit 1; }'
+                dir('src') {
+                    timeout(time: "${env.BUILD_TIMEOUT}", unit: 'MINUTES') {
+                        sh './mvnw clean package -DskipTests'
+                        sh 'ls -l target/*.jar || { echo "❌ JAR file not found"; exit 1; }'
+                    }
                 }
             }
         }
 
         stage('Test') {
             steps {
-                sh 'mvn test'
-                junit 'target/surefire-reports/*.xml'
-                archiveArtifacts artifacts: 'target/surefire-reports/*.xml', allowEmptyArchive: true
+                dir('src') {
+                    sh './mvnw test'
+                    junit 'target/surefire-reports/*.xml'
+                    archiveArtifacts artifacts: 'target/surefire-reports/*.xml', allowEmptyArchive: true
+                }
             }
         }
 
         stage('Docker Operations') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                    docker build -t ${DOCKER_IMAGE} .
-                    docker push ${DOCKER_IMAGE}
-                    """
+                dir('src') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                        docker build -t ${DOCKER_IMAGE} .
+                        echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                        docker push ${DOCKER_IMAGE}
+                        """
+                    }
                 }
             }
         }
@@ -52,36 +70,45 @@ pipeline {
         stage('Prepare Minikube') {
             steps {
                 script {
-                    // Fix Minikube certificate issues
-                    sh '''
-                    minikube delete || true
-                    rm -rf ~/.minikube ~/.kube
-                    minikube start --memory=4000 --cpus=2 --driver=docker
-                    minikube update-context
-                    '''
+                    // Clean up previous cluster
+                    sh 'minikube delete || true'
+                    
+                    // Start fresh cluster with more resources
+                    sh """
+                    minikube start \
+                        --driver=docker \
+                        --memory=4000 \
+                        --cpus=2 \
+                        --extra-config=apiserver.enable-admission-plugins="" \
+                        --ports=${NODE_PORT}:${NODE_PORT}
+                    minikube addons enable metrics-server
+                    """
                 }
             }
         }
 
-        stage('Kubernetes Deployment') {
+        stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    // Wait for cluster to be ready
-                    sh 'kubectl wait --for=condition=Ready nodes --all --timeout=120s'
-                    
-                    // Update deployment with new image
-                    sh """
-                    kubectl config use-context ${KUBE_CONTEXT}
-                    sed -i "s|image:.*|image: ${DOCKER_IMAGE}|" k8s-deployment.yaml
-                    kubectl apply -f k8s-deployment.yaml --validate=false
-                    """
-
-                    // Verify deployment
-                    timeout(time: 5, unit: 'MINUTES') {
+                dir('src') {
+                    script {
+                        // Update and apply deployment
                         sh """
-                        kubectl rollout status deployment/medicure-deployment --timeout=300s
-                        kubectl get pods -o wide
+                        sed -i "s|image:.*|image: ${DOCKER_IMAGE}|" medicure-deployment-v3.yaml
+                        kubectl apply -f medicure-deployment-v3.yaml --validate=false
                         """
+                        
+                        // Verify deployment
+                        timeout(time: 5, unit: 'MINUTES') {
+                            sh """
+                            kubectl rollout status deployment/medicure-deployment --timeout=300s
+                            kubectl get pods -o wide
+                            """
+                        }
+                        
+                        // Get access details
+                        def NODE_IP = sh(script: "minikube ip", returnStdout: true).trim()
+                        echo "🌐 Application Health Check: curl http://${NODE_IP}:${NODE_PORT}/actuator/health"
+                        echo "📊 Prometheus Metrics: curl http://${NODE_IP}:${NODE_PORT}/actuator/prometheus"
                     }
                 }
             }
@@ -90,14 +117,33 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 script {
-                    def SERVICE_URL = sh(script: 'minikube service medicure-service --url', returnStdout: true).trim()
-                    sh """
-                    curl -sSf ${SERVICE_URL}/actuator/health || { 
-                        echo "❌ Health check failed"; 
-                        kubectl logs -l app=medicure --tail=50;
-                        exit 1; 
+                    def NODE_IP = sh(script: "minikube ip", returnStdout: true).trim()
+                    
+                    // Retry logic for health check
+                    def retryCount = 0
+                    def maxRetries = 5
+                    def success = false
+                    
+                    while (retryCount < maxRetries && !success) {
+                        try {
+                            sh "curl -sSf http://${NODE_IP}:${NODE_PORT}/actuator/health"
+                            success = true
+                            echo "✅ Health check passed"
+                        } catch (Exception e) {
+                            retryCount++
+                            echo "⚠️ Attempt ${retryCount}/${maxRetries} failed. Retrying in 10 seconds..."
+                            sleep(10)
+                        }
                     }
-                    """
+                    
+                    if (!success) {
+                        sh """
+                        echo "❌ Health check failed after ${maxRetries} attempts"
+                        kubectl describe pods -l app=medicure
+                        kubectl logs -l app=medicure --tail=100
+                        """
+                        error("Smoke test failed")
+                    }
                 }
             }
         }
@@ -105,20 +151,31 @@ pipeline {
 
     post {
         always {
-            // Cleanup and artifacts
-            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            junit 'target/surefire-reports/*.xml'
+            // Archive important files
+            dir('src') {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                junit 'target/surefire-reports/*.xml'
+            }
+            
+            // Clean up workspace
             cleanWs()
             
-            // Final status notification (email instead of slack)
-            emailext (
-                subject: "Build ${currentBuild.currentResult}: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})",
-                body: """
-                Check console output at ${env.BUILD_URL}
-                """,
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
-                to: 'devops@example.com'
-            )
+            // Send notification
+            script {
+                def subject = "${currentBuild.currentResult}: Job ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+                def details = """
+                Build: ${env.BUILD_URL}
+                Docker Image: ${DOCKER_IMAGE}
+                ${currentBuild.currentResult == 'SUCCESS' ? '✅ Deployment successful' : '❌ Deployment failed'}
+                """
+                
+                emailext(
+                    subject: subject,
+                    body: details,
+                    to: 'devops@example.com',
+                    attachLog: true
+                )
+            }
         }
     }
 }
