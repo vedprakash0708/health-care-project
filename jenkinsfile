@@ -41,12 +41,24 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    script {
-                        sh """
-                        docker build -t ${DOCKER_IMAGE} .
-                        docker push ${DOCKER_IMAGE}
-                        """
-                    }
+                    sh """
+                    docker build -t ${DOCKER_IMAGE} .
+                    docker push ${DOCKER_IMAGE}
+                    """
+                }
+            }
+        }
+
+        stage('Prepare Minikube') {
+            steps {
+                script {
+                    // Fix Minikube certificate issues
+                    sh '''
+                    minikube delete || true
+                    rm -rf ~/.minikube ~/.kube
+                    minikube start --memory=4000 --cpus=2 --driver=docker
+                    minikube update-context
+                    '''
                 }
             }
         }
@@ -54,12 +66,9 @@ pipeline {
         stage('Kubernetes Deployment') {
             steps {
                 script {
-                    // Ensure Minikube is running
-                    def minikubeStatus = sh(script: 'minikube status || true', returnStatus: true)
-                    if (minikubeStatus != 0) {
-                        sh 'minikube start --memory=4000 --cpus=2 --driver=docker'
-                    }
-
+                    // Wait for cluster to be ready
+                    sh 'kubectl wait --for=condition=Ready nodes --all --timeout=120s'
+                    
                     // Update deployment with new image
                     sh """
                     kubectl config use-context ${KUBE_CONTEXT}
@@ -70,14 +79,10 @@ pipeline {
                     // Verify deployment
                     timeout(time: 5, unit: 'MINUTES') {
                         sh """
-                        kubectl rollout status deployment/medicure-deployment --timeout=120s
+                        kubectl rollout status deployment/medicure-deployment --timeout=300s
                         kubectl get pods -o wide
                         """
                     }
-
-                    // Get service URL
-                    def SERVICE_URL = sh(script: 'minikube service medicure-service --url', returnStdout: true).trim()
-                    echo "🌐 Service available at: ${SERVICE_URL}"
                 }
             }
         }
@@ -105,21 +110,15 @@ pipeline {
             junit 'target/surefire-reports/*.xml'
             cleanWs()
             
-            // Final status
-            script {
-                def BUILD_STATUS = currentBuild.currentResult
-                if (BUILD_STATUS == 'SUCCESS') {
-                    slackSend(color: 'good', message: "✅ Build #${BUILD_NUMBER} succeeded!")
-                } else {
-                    slackSend(color: 'danger', message: "❌ Build #${BUILD_NUMBER} failed!")
-                    // Save debug info
-                    sh '''
-                    kubectl describe pods -l app=medicure > pod-description.log
-                    kubectl logs -l app=medicure --tail=100 > pod-logs.log
-                    '''
-                    archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
-                }
-            }
+            // Final status notification (email instead of slack)
+            emailext (
+                subject: "Build ${currentBuild.currentResult}: Job '${env.JOB_NAME}' (${env.BUILD_NUMBER})",
+                body: """
+                Check console output at ${env.BUILD_URL}
+                """,
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: 'devops@example.com'
+            )
         }
     }
 }
