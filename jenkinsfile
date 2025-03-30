@@ -55,8 +55,25 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f k8s-deployment.yaml'
-                sh 'kubectl rollout restart deployment medicure-deployment'  // Restart deployment
+                script {
+                    sh '''
+                    echo "🔄 Checking Minikube status..."
+                    minikube status || minikube start
+
+                    echo "✅ Using Minikube context..."
+                    kubectl config use-context minikube
+
+                    echo "⏳ Waiting for Kubernetes nodes to be ready..."
+                    kubectl wait --for=condition=Ready nodes --all --timeout=60s
+
+                    echo "🚀 Deploying application..."
+                    kubectl apply -f k8s-deployment.yaml --validate=false
+                    kubectl rollout restart deployment medicure-deployment
+
+                    echo "🔍 Checking pod status..."
+                    kubectl get pods -o wide
+                    '''
+                }
             }
         }
     }
