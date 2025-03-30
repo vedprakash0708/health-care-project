@@ -1,0 +1,75 @@
+# medicure-deployment-v3.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medicure-deployment
+  labels:
+    app: medicure
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: medicure
+  template:
+    metadata:
+      labels:
+        app: medicure
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+      - name: medicure
+        image: vedantabharat/medicure-service:latest  # Will be replaced by Jenkins
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SERVER_PORT
+          value: "8080"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 20
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          failureThreshold: 10
+          periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medicure-service
+  labels:
+    app: medicure
+spec:
+  selector:
+    app: medicure
+  ports:
+    - protocol: TCP
+      port: 8080    # Service port
+      targetPort: 8080  # Container port
+      nodePort: 30080  # Fixed NodePort for easier testing
+  type: NodePort
