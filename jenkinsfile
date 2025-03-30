@@ -18,17 +18,21 @@ pipeline {
         }
         
         stage('Build & Test') {
-            timeout(time: "${env.BUILD_TIMEOUT}", unit: 'MINUTES') {
-                steps {
+            steps {
+                timeout(time: "${env.BUILD_TIMEOUT}", unit: 'MINUTES') {
                     parallel(
                         "Build": {
-                            sh 'mvn clean package -DskipTests'
-                            sh 'ls -l target/*.jar || { echo "❌ JAR file not found"; exit 1; }'
+                            steps {
+                                sh 'mvn clean package -DskipTests'
+                                sh 'ls -l target/*.jar || { echo "❌ JAR file not found"; exit 1; }'
+                            }
                         },
                         "Test": {
-                            sh 'mvn test'
-                            junit 'target/surefire-reports/*.xml'
-                            archiveArtifacts artifacts: 'target/surefire-reports/*.xml', allowEmptyArchive: true
+                            steps {
+                                sh 'mvn test'
+                                junit 'target/surefire-reports/*.xml'
+                                archiveArtifacts artifacts: 'target/surefire-reports/*.xml', allowEmptyArchive: true
+                            }
                         }
                     )
                 }
